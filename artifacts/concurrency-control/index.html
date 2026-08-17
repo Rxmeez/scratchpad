@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>Concurrency Control, Explained Visually</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .diagram { text-align:center; background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:24px 16px; font-family: "SF Mono", ui-monospace, Consolas, monospace; overflow-x:auto; }
+  .flow-step { display:inline-block; background: rgba(255,107,74,0.12); color: var(--accent); border:1px solid var(--accent-dim); padding:8px 14px; border-radius:6px; margin:4px; font-size:0.85rem; font-weight:600; }
+  .arrow { color: var(--text-dim); font-size:1.1rem; margin:0 6px; }
+  .pro { color: #4ade80; font-weight: 600; }
+  .con { color: #f87171; font-weight: 600; }
+  .badge-good { color: #4ade80; font-weight:600; }
+  .badge-bad { color: #f87171; font-weight:600; }
+  .timeline { font-family: "SF Mono", ui-monospace, Consolas, monospace; background: var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:16px; overflow-x:auto; font-size:0.85rem; line-height:1.9; }
+  .tx-a { color: #60a5fa; font-weight:600; }
+  .tx-b { color: #f472b6; font-weight:600; }
+  .lock-tag { background: rgba(248,113,113,0.15); color:#f87171; padding:1px 6px; border-radius:4px; font-size:0.78rem; }
+  .quiz-opt { display:block; width:100%; text-align:left; background: var(--bg-elevated); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:8px 0; cursor:pointer; font-size:0.95rem; font-family: inherit; }
+  .quiz-opt:hover { border-color: var(--accent-dim); }
+  .quiz-opt.correct { background: rgba(74,222,128,0.12); border-color:#4ade80; }
+  .quiz-opt.wrong { background: rgba(248,113,113,0.12); border-color:#f87171; }
+  #quiz-explain { margin-top:14px; padding:14px; border-radius:8px; background: var(--code-bg); border:1px solid var(--border); display:none; line-height:1.6; }
+  table td, table th { padding:8px 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site-header">
+<a class="brand" href="../../"><span class="dot"></span> scratchpad</a>
+<span class="tag">databases</span>
+</header>
+
+<h1>Concurrency Control, Explained Visually</h1>
+<p class="meta">2026-08-17 · zero_rxpc</p>
+
+<p>How databases let many transactions run at once without corrupting data or blocking each other into the ground. Covers pessimistic locking, optimistic concurrency, and MVCC — with timelines, tradeoffs, and a quiz at the end.</p>
+
+<h2>1. The Core Problem</h2>
+<div class="card">
+<p>Concurrency control exists because multiple transactions touching the same rows <i>at the same time</i> can produce wrong results if left unmanaged. Classic failure modes:</p>
+<ul>
+<li><b>Lost update</b> — Tx A and Tx B both read a value, both write back based on the stale read; one write silently overwrites the other.</li>
+<li><b>Dirty read</b> — Tx B reads a value Tx A wrote but hasn't committed yet; Tx A rolls back, and Tx B acted on data that never really existed.</li>
+<li><b>Non-repeatable read</b> — Tx A reads a row twice in the same transaction and gets two different values because Tx B committed a change in between.</li>
+<li><b>Phantom read</b> — Tx A re-runs the same query and a new row appears because Tx B inserted a matching row in between.</li>
+</ul>
+<p><b>Key insight:</b> the strategy you pick trades off between <i>correctness guarantees</i>, <i>throughput under contention</i>, and <i>how gracefully conflicts are handled</i>. There is no free lunch.</p>
+</div>
+
+<h2>2. The Three Main Strategies</h2>
+<div class="diagram">
+<span class="flow-step">Pessimistic Locking</span><span class="arrow">vs</span><span class="flow-step">Optimistic Concurrency (OCC)</span><span class="arrow">vs</span><span class="flow-step">MVCC</span>
+<br><br>
+<span class="arrow">Lock first, ask later &nbsp;|&nbsp; Ask first, check at commit &nbsp;|&nbsp; Never block reads, keep versions</span>
+</div>
+
+<h2>3. Pessimistic Locking</h2>
+<div class="card">
+<p>Assume conflicts <i>will</i> happen, so lock the row before touching it. Other transactions wanting the same row must wait.</p>
+<div class="timeline">
+<span class="tx-a">Tx A:</span> BEGIN<br>
+<span class="tx-a">Tx A:</span> SELECT * FROM accounts WHERE id=1 <span class="lock-tag">FOR UPDATE</span> &nbsp;→ row locked<br>
+<span class="tx-b">Tx B:</span> BEGIN<br>
+<span class="tx-b">Tx B:</span> SELECT * FROM accounts WHERE id=1 FOR UPDATE &nbsp;→ <span class="lock-tag">BLOCKS, waits</span><br>
+<span class="tx-a">Tx A:</span> UPDATE accounts SET balance = balance - 100 WHERE id=1<br>
+<span class="tx-a">Tx A:</span> COMMIT &nbsp;→ lock released<br>
+<span class="tx-b">Tx B:</span> (unblocked) reads the fresh balance, proceeds
+</div>
+<p>Example (Postgres/MySQL): <code>SELECT ... FOR UPDATE</code> takes a row-level exclusive lock until the transaction ends.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Simple to reason about — no retry logic needed</td><td class="con">Contention causes waiting → throughput drops under load</td></tr>
+<tr><td class="pro">Guarantees no lost updates, ever</td><td class="con">Risk of deadlocks if lock order isn't consistent</td></tr>
+<tr><td class="pro">Good fit for high-conflict workloads (e.g. inventory decrement)</td><td class="con">Long-held locks block unrelated readers/writers</td></tr>
+</table>
+</div>
+
+<h2>4. Optimistic Concurrency Control (OCC)</h2>
+<div class="card">
+<p>Assume conflicts are <i>rare</i>. Don't lock anything — read freely, then at write time check whether the data changed since you read it. If it did, reject and retry.</p>
+<div class="timeline">
+<span class="tx-a">Tx A:</span> SELECT balance, <b>version</b> FROM accounts WHERE id=1 &nbsp;→ balance=500, version=7<br>
+<span class="tx-b">Tx B:</span> SELECT balance, <b>version</b> FROM accounts WHERE id=1 &nbsp;→ balance=500, version=7<br>
+<span class="tx-a">Tx A:</span> UPDATE accounts SET balance=400, version=8 WHERE id=1 AND version=7 &nbsp;→ <span class="pro">1 row affected, OK</span><br>
+<span class="tx-b">Tx B:</span> UPDATE accounts SET balance=600, version=8 WHERE id=1 AND version=7 &nbsp;→ <span class="con">0 rows affected — version moved on, retry!</span>
+</div>
+<p>Example (application-level, works on any SQL DB): add a <code>version</code> or <code>updated_at</code> column, include it in the <code>WHERE</code> clause of every update, check the affected row count.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">No locks, no blocking — great read/write throughput</td><td class="con">Wasted work on conflict — the losing transaction must retry</td></tr>
+<tr><td class="pro">No deadlock risk</td><td class="con">Bad fit for high-contention hot rows (constant retries)</td></tr>
+<tr><td class="pro">Scales well for low-conflict, read-heavy workloads</td><td class="con">Requires app-level discipline (every writer must check version)</td></tr>
+</table>
+</div>
+
+<h2>5. MVCC (Multi-Version Concurrency Control)</h2>
+<div class="card">
+<p>Used by Postgres, MySQL/InnoDB, Oracle. Instead of locking rows for reads, the database keeps <i>multiple versions</i> of each row and gives every transaction a consistent snapshot as of when it started. Readers never block writers, and writers never block readers.</p>
+<div class="diagram">
+<span class="flow-step">Row v1 (balance=500)</span><span class="arrow">Tx A updates →</span><span class="flow-step">Row v2 (balance=400)</span>
+<br><br>
+<span class="arrow">Tx B, started before the update, still sees v1 via its snapshot. Old versions get vacuumed/purged once no transaction needs them.</span>
+</div>
+<p>Example (Postgres): every row has hidden <code>xmin</code>/<code>xmax</code> system columns marking which transaction created/deleted that version. <code>SELECT</code> just filters versions visible to your transaction's snapshot — no lock needed.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Readers never block writers, writers never block readers</td><td class="con">Still need locks/version checks for write-write conflicts</td></tr>
+<tr><td class="pro">Great for read-heavy + moderate write workloads</td><td class="con">Old row versions pile up — needs vacuum/GC (Postgres bloat is a real ops concern)</td></tr>
+<tr><td class="pro">Default behavior in Postgres/MySQL — you get it for free</td><td class="con">Long-running transactions can block vacuum, growing table bloat</td></tr>
+</table>
+</div>
+
+<h2>6. Which One Should You Use?</h2>
+<div class="card">
+<p><span class="badge-good">✅ Pessimistic locking when:</span> conflicts are frequent and correctness must be guaranteed immediately (e.g. seat booking, inventory decrement, bank transfers on the same account).</p>
+<p><span class="badge-good">✅ OCC when:</span> conflicts are rare, workload is mostly reads with occasional writes, and you can cheaply retry on conflict (e.g. editing a user profile, CMS documents).</p>
+<p><span class="badge-good">✅ MVCC (usually automatic):</span> you're on Postgres/MySQL and want good read/write concurrency by default — you get this without doing anything, but should still add app-level version checks for write-write safety on hot rows.</p>
+<p><span class="badge-bad">❌ Avoid:</span> mixing pessimistic locks across many tables without a strict, consistent lock ordering (deadlock magnet). Avoid pure OCC on very hot rows with many concurrent writers (thrashing retries).</p>
+</div>
+
+<h2>7. Cement It — Quick Interactive Quiz</h2>
+<div class="card">
+<p id="quiz-q"><b>Q1.</b> Two users open the same product-edit form at the same time. Both submit an update 10 seconds apart, each based on the version they originally loaded. Which strategy would make the SECOND submit fail with a "someone else edited this" message instead of silently overwriting the first user's change?</p>
+<div id="quiz-opts">
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Plain UPDATE with no locking or version check just overwrites - this is exactly the lost-update problem, not a fix for it.')">1) A plain UPDATE statement with no extra conditions</button>
+<button class="quiz-opt" data-correct="true" onclick="answer(this,'Correct. Optimistic Concurrency Control adds the version/updated_at column to the WHERE clause. If the row moved on since you read it, the UPDATE affects 0 rows, and the app can detect that and show a conflict message instead of silently overwriting.')">2) Optimistic concurrency control using a version column in the WHERE clause</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'MVCC alone (the Postgres/MySQL default) does not prevent lost updates on write-write conflicts by itself - it only isolates readers from writers, not writers from each other.')">3) Relying on MVCC snapshot isolation alone, with no version check</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Increasing the connection pool size has nothing to do with detecting concurrent edits to the same row.')">4) Increasing the database connection pool size</button>
+</div>
+<div id="quiz-explain"></div>
+</div>
+
+<script>
+function answer(el, explanation) {
+  var opts = document.querySelectorAll('.quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+</script>
+
+<footer>Generated as a learning artifact on database concurrency control. — zero_rxpc 🦀</footer>
+</div>
+</body>
+</html>

@@ -19,5 +19,12 @@
     "description": "How log-based Change Data Capture works, a full Debezium + Kafka setup walkthrough, pros/cons, and an interactive quiz to cement it.",
     "topic": "data engineering",
     "date": "2026-08-17"
+  },
+  {
+    "slug": "concurrency-control",
+    "title": "Concurrency Control, Explained Visually",
+    "description": "Pessimistic locking vs optimistic concurrency vs MVCC — timelines, real SQL examples, pros/cons, and when to use each, plus a quiz.",
+    "topic": "databases",
+    "date": "2026-08-17"
   }
 ]
