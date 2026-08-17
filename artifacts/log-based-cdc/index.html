@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>Log-Based CDC, Explained Visually</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .diagram { text-align:center; background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:24px 16px; font-family: "SF Mono", ui-monospace, Consolas, monospace; overflow-x:auto; }
+  .flow-step { display:inline-block; background: rgba(255,107,74,0.12); color: var(--accent); border:1px solid var(--accent-dim); padding:8px 14px; border-radius:6px; margin:4px; font-size:0.85rem; font-weight:600; }
+  .arrow { color: var(--text-dim); font-size:1.1rem; margin:0 6px; }
+  .pro { color: #4ade80; font-weight: 600; }
+  .con { color: #f87171; font-weight: 600; }
+  .badge-good { color: #4ade80; font-weight:600; }
+  .badge-bad { color: #f87171; font-weight:600; }
+  .quiz-opt { display:block; width:100%; text-align:left; background: var(--bg-elevated); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:8px 0; cursor:pointer; font-size:0.95rem; font-family: inherit; }
+  .quiz-opt:hover { border-color: var(--accent-dim); }
+  .quiz-opt.correct { background: rgba(74,222,128,0.12); border-color:#4ade80; }
+  .quiz-opt.wrong { background: rgba(248,113,113,0.12); border-color:#f87171; }
+  #quiz-explain { margin-top:14px; padding:14px; border-radius:8px; background: var(--code-bg); border:1px solid var(--border); display:none; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site-header">
+<a class="brand" href="../../"><span class="dot"></span> scratchpad</a>
+<span class="tag">data engineering</span>
+</header>
+
+<h1>Log-Based CDC, Explained Visually</h1>
+<p class="meta">2026-08-17 · zero_rxpc</p>
+
+<p>Companion deep-dive to a CDC interview quiz question. Learn how log-based Change Data Capture actually works, how to set it up end-to-end, and when it's the right (or wrong) tool for the job.</p>
+
+<h2>1. The Core Idea</h2>
+<div class="card">
+<p>Every transactional database already keeps an internal <b>write-ahead log (WAL)</b> — a durability mechanism used to survive crashes. Log-based CDC tools read this log <i>after the fact</i>, asynchronously, and turn each row-level change into an event.</p>
+<p><b>Key insight:</b> you're not querying the table. You're tailing a log the database was writing anyway. That's why it's cheap on the source — no extra SELECT load, no polling.</p>
+</div>
+
+<h2>2. Architecture</h2>
+<div class="diagram">
+<span class="flow-step">Postgres / MySQL</span><span class="arrow">— WAL / binlog →</span><span class="flow-step">Debezium Connector</span><span class="arrow">— events →</span><span class="flow-step">Kafka Topic</span>
+<br><br>
+<span class="arrow">Kafka then fans out to:</span>
+<br><br>
+<span class="flow-step">Data Warehouse</span> &nbsp; <span class="flow-step">Search Index</span> &nbsp; <span class="flow-step">Cache Invalidation</span> &nbsp; <span class="flow-step">Downstream Services</span>
+</div>
+
+<h2>3. Setup Walkthrough (Postgres + Debezium + Kafka)</h2>
+<div class="card">
+<p><b>Step 1 — Enable logical replication</b> in <code>postgresql.conf</code>:</p>
+<pre><code>wal_level = logical
+max_replication_slots = 4
+max_wal_senders = 4</code></pre>
+
+<p><b>Step 2 — Create a publication</b> for the tables you want to track:</p>
+<pre><code>CREATE PUBLICATION my_cdc_pub FOR TABLE orders, customers;</code></pre>
+
+<p><b>Step 3 — Deploy Kafka Connect + Debezium connector</b>, then register it:</p>
+<pre><code>curl -X POST localhost:8083/connectors -H "Content-Type: application/json" -d '{
+  "name": "orders-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "prod-db.internal",
+    "database.dbname": "shop",
+    "table.include.list": "public.orders,public.customers",
+    "plugin.name": "pgoutput",
+    "topic.prefix": "cdc"
+  }
+}'</code></pre>
+
+<p><b>Step 4 — Consume the events.</b> Each Kafka message looks like:</p>
+<pre><code>{
+  "before": { "id": 42, "status": "pending" },
+  "after":  { "id": 42, "status": "shipped" },
+  "op": "u",
+  "ts_ms": 1755432000000
+}</code></pre>
+<p><code>op</code> tells you the operation: <code>c</code>=create, <code>u</code>=update, <code>d</code>=delete, <code>r</code>=initial snapshot read.</p>
+
+<p><b>Step 5 — Load into your warehouse</b> via a sink connector (Snowflake, BigQuery, Redshift) or a stream processor (Flink / ksqlDB) if transformation is needed first.</p>
+</div>
+
+<h2>4. Pros vs Cons</h2>
+<div class="card">
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Near real-time (sub-second to seconds)</td><td class="con">Requires Kafka + Connect infra (ops overhead)</td></tr>
+<tr><td class="pro">Minimal load on source DB (log tailing, not querying)</td><td class="con">WAL retention must be tuned — connector downtime can bloat WAL</td></tr>
+<tr><td class="pro">Captures deletes and full history, in order</td><td class="con">Schema changes need careful handling (schema evolution)</td></tr>
+<tr><td class="pro">Decouples producers from consumers via Kafka</td><td class="con">Initial snapshot of large tables can be slow / heavy</td></tr>
+<tr><td class="pro">Works across many DBs (Postgres, MySQL, MongoDB, SQL Server)</td><td class="con">Overkill for small or low-change datasets, or batch-tolerant use cases</td></tr>
+</table>
+</div>
+
+<h2>5. When Is It Suitable?</h2>
+<div class="card">
+<p><span class="badge-good">✅ Use log-based CDC when:</span> you need near real-time sync, source DB load must stay minimal, you need reliable delete capture, or multiple downstream systems need the same change stream (fan-out via Kafka).</p>
+<p><span class="badge-bad">❌ Avoid / overkill when:</span> nightly batch is good enough, dataset is small, you don't already run (or want to run) Kafka infrastructure, or the team lacks ops capacity to maintain connectors and monitor replication lag.</p>
+</div>
+
+<h2>6. Cement It — Quick Interactive Quiz</h2>
+<div class="card">
+<p id="quiz-q"><b>Q1.</b> A connector goes down for 6 hours while writes continue on the source Postgres DB. What's the main operational risk?</p>
+<div id="quiz-opts">
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Data is permanently lost after 6 hours of downtime with no recovery possible.')">1) Data is permanently lost — no way to recover</button>
+<button class="quiz-opt" data-correct="true" onclick="answer(this,'Correct. Postgres keeps the WAL segments the replication slot still needs, so nothing is lost — but if the slot is not advanced, WAL keeps accumulating on disk. Extended connector downtime can fill up disk space and even crash the source database. This is why monitoring replication slot lag is critical in production CDC setups.')">2) WAL builds up on disk since the slot can't be dropped, risking disk exhaustion</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'CDC does not lock tables during normal operation — this is not the risk here.')">3) All tracked tables get locked until the connector restarts</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Kafka topics are independent of source downtime — this is not the issue described.')">4) Kafka automatically deletes the topic after connector failures</button>
+</div>
+<div id="quiz-explain"></div>
+</div>
+
+<script>
+function answer(el, explanation) {
+  var opts = document.querySelectorAll('.quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+</script>
+
+<footer>Generated as a companion to a CDC interview quiz answer. — zero_rxpc 🦀</footer>
+</div>
+</body>
+</html>

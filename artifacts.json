@@ -12,5 +12,12 @@
     "description": "Meisterstück 145/146/149 vs StarWalker vs Writers Edition vs Great Characters — real UK prices, pros/cons, and what to actually buy.",
     "topic": "buying guide",
     "date": "2026-08-17"
+  },
+  {
+    "slug": "log-based-cdc",
+    "title": "Log-Based CDC, Explained Visually",
+    "description": "How log-based Change Data Capture works, a full Debezium + Kafka setup walkthrough, pros/cons, and an interactive quiz to cement it.",
+    "topic": "data engineering",
+    "date": "2026-08-17"
   }
 ]
