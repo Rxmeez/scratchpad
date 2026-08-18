@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>LakeSail (Sail): The Rust-Native Spark Replacement</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .diagram { text-align:center; background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:24px 16px; font-family: "SF Mono", ui-monospace, Consolas, monospace; overflow-x:auto; }
+  .flow-step { display:inline-block; background: rgba(255,107,74,0.12); color: var(--accent); border:1px solid var(--accent-dim); padding:8px 14px; border-radius:6px; margin:4px; font-size:0.85rem; font-weight:600; }
+  .arrow { color: var(--text-dim); font-size:1.1rem; margin:0 6px; }
+  .pro { color: #4ade80; font-weight: 600; }
+  .con { color: #f87171; font-weight: 600; }
+  .badge-good { color: #4ade80; font-weight:600; }
+  .badge-bad { color: #f87171; font-weight:600; }
+  .stat-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:12px; margin:16px 0; }
+  .stat-box { background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center; }
+  .stat-num { color:var(--accent); font-size:1.5rem; font-weight:700; }
+  .stat-label { color:var(--text-dim); font-size:0.78rem; margin-top:4px; }
+  .quiz-opt { display:block; width:100%; text-align:left; background: var(--bg-elevated); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:8px 0; cursor:pointer; font-size:0.95rem; font-family: inherit; }
+  .quiz-opt:hover { border-color: var(--accent-dim); }
+  .quiz-opt.correct { background: rgba(74,222,128,0.12); border-color:#4ade80; }
+  .quiz-opt.wrong { background: rgba(248,113,113,0.12); border-color:#f87171; }
+  #quiz-explain { margin-top:14px; padding:14px; border-radius:8px; background: var(--code-bg); border:1px solid var(--border); display:none; line-height:1.6; }
+  table td, table th { padding:8px 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site-header">
+<a class="brand" href="../../"><span class="dot"></span> scratchpad</a>
+<span class="tag">data engineering</span>
+</header>
+
+<h1>LakeSail (Sail): The Rust-Native Spark Replacement</h1>
+<p class="meta">2026-08-18 · zero_rxpc</p>
+
+<p>Sail (by LakeSail) is a drop-in Apache Spark replacement written in Rust — same Spark SQL/DataFrame API via the Spark Connect protocol, but no JVM underneath. Here's how it works, the numbers behind the pitch, and when it's actually worth switching.</p>
+
+<h2>1. The Core Idea</h2>
+<div class="card">
+<p>Spark's engine runs on the JVM. That means JVM startup time, garbage collection pauses, manual memory/heap tuning, and Python workloads paying a serialization tax to cross the JVM/Python boundary.</p>
+<p>Sail keeps everything developers already know — Spark SQL syntax, the DataFrame API, PySpark code — but swaps the execution engine underneath for a Rust runtime built on <b>Apache Arrow</b> (columnar in-memory format) and <b>Apache DataFusion</b> (a Rust-native query engine). Your client connects via the <b>Spark Connect protocol</b>, so existing PySpark code runs unmodified — you just point the session at a different server.</p>
+</div>
+
+<h2>2. Architecture</h2>
+<div class="diagram">
+<span class="flow-step">Your existing PySpark code</span><span class="arrow">— Spark Connect protocol →</span><span class="flow-step">Sail Server (Rust)</span><span class="arrow">built on →</span><span class="flow-step">Apache Arrow + DataFusion</span>
+<br><br>
+<span class="arrow">reads/writes native lakehouse formats:</span>
+<br><br>
+<span class="flow-step">Delta Lake</span> &nbsp; <span class="flow-step">Apache Iceberg</span> &nbsp; <span class="flow-step">Parquet / S3 / Azure / GCS / HDFS</span>
+</div>
+<div class="card">
+<p><b>No code rewrite:</b> <code>spark = SparkSession.builder.remote("sc://localhost:50051").getOrCreate()</code> — same DataFrame calls, same SQL strings, same UDFs. The only change is the connection string.</p>
+<p>Sail workers are <b>stateless and lightweight</b> — they start in seconds and idle at a few megabytes of memory, versus JVM executors that carry real startup and idle overhead. That's what enables scale-to-zero behavior in cloud deployments.</p>
+</div>
+
+<h2>3. The Benchmark Numbers</h2>
+<div class="card">
+<p>From LakeSail's published derived TPC-H benchmark (22 queries, scale factor 100, Parquet, AWS r8g.4xlarge instances) comparing Sail against Apache Spark:</p>
+<div class="stat-grid">
+<div class="stat-box"><div class="stat-num">10x</div><div class="stat-label">faster total query time (534.78s → 52.81s)</div></div>
+<div class="stat-box"><div class="stat-num">98%</div><div class="stat-label">lower peak memory (72GB → 26GB)</div></div>
+<div class="stat-box"><div class="stat-num">0</div><div class="stat-label">GB shuffle spill to disk (Spark: 115GB)</div></div>
+<div class="stat-box"><div class="stat-num">0</div><div class="stat-label">lines of code rewritten to migrate</div></div>
+</div>
+<p style="color:var(--text-dim); font-size:0.85rem;">These are vendor-published numbers from LakeSail's own benchmark methodology — treat as a best-case, and validate against your own workload mix before trusting the multiplier directly.</p>
+</div>
+
+<h2>4. Pros vs Cons</h2>
+<div class="card">
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">No JVM = no GC pauses, instant startup, predictable memory</td><td class="con">Younger project — smaller community/ecosystem than Spark (3.3k GitHub stars vs Spark's decade+ maturity)</td></tr>
+<tr><td class="pro">Drop-in via Spark Connect — claims zero code rewrites</td><td class="con">Compatibility is close but not 100% — LakeSail ships an experimental compatibility-check script, meaning gaps exist</td></tr>
+<tr><td class="pro">Native Delta Lake + Iceberg support, open formats, no lock-in</td><td class="con">Distributed/cluster mode and enterprise tooling (job schedulers, monitoring ecosystem) less battle-tested than Spark's</td></tr>
+<tr><td class="pro">Zero-copy Python UDFs via Arrow — avoids the JVM↔Python serialization tax</td><td class="con">Fewer third-party connectors/integrations than the mature Spark ecosystem (custom sources, older enterprise connectors)</td></tr>
+<tr><td class="pro">Rust memory safety — no null pointers, no data races by construction</td><td class="con">Migrating production-critical pipelines to a newer engine carries inherent operational risk regardless of benchmarks</td></tr>
+</table>
+</div>
+
+<h2>5. When Is It Suitable?</h2>
+<div class="card">
+<p><span class="badge-good">✅ Good fit when:</span> you're running standard PySpark/Spark SQL workloads (batch ETL, DataFrame transforms, SQL analytics) on Delta Lake or Iceberg, your Spark cluster costs are painful, and you want to test a compatible engine without rewriting pipeline code.</p>
+<p><span class="badge-bad">❌ Weaker fit when:</span> you depend heavily on a specific third-party Spark connector/library that hasn't been validated against Sail, you need enterprise support/SLA maturity Spark's ecosystem already has, or your workload leans on obscure Spark internals rather than the standard SQL/DataFrame surface.</p>
+<p>Practical move: run the free compatibility-check script against your codebase first, then pilot on a non-critical pipeline before touching anything production-critical.</p>
+</div>
+
+<h2>6. Cement It — Quick Interactive Quiz</h2>
+<div class="card">
+<p id="quiz-q"><b>Q1.</b> What is the primary architectural reason Sail claims better performance than standard Apache Spark for the same PySpark code?</p>
+<div id="quiz-opts">
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Sail does not use a different SQL dialect for typical queries - it targets Spark SQL compatibility. A different SQL dialect would break the drop-in replacement claim, not improve performance.')">1) It uses a completely different, incompatible SQL dialect optimized for speed</button>
+<button class="quiz-opt" data-correct="true" onclick="answer(this,'Correct. Spark runs on the JVM, which brings garbage collection pauses, JVM startup overhead, and a serialization tax when Python code crosses into JVM-managed memory. Sail replaces that engine with a Rust runtime built on Apache Arrow (columnar format) and DataFusion (Rust query engine), eliminating GC pauses and enabling zero-copy Arrow-based data sharing for Python UDFs - while keeping the same Spark SQL/DataFrame API via the Spark Connect protocol.')">2) It replaces the JVM execution engine with a Rust runtime (Arrow + DataFusion), removing GC pauses and JVM overhead while keeping the same API</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Sail explicitly avoids proprietary formats - it works natively with open formats like Delta Lake and Iceberg. Locking data into a proprietary format is not the performance mechanism here.')">3) It stores all data in a proprietary compressed format that only Sail can read</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Distributed shuffling still happens in Sail for joins and aggregations - the benchmark actually shows zero shuffle SPILL to disk (not zero shuffle), which is a different, more specific claim about avoiding spill-to-disk overhead.')">4) It eliminates distributed shuffling entirely by processing everything on a single node</button>
+</div>
+<div id="quiz-explain"></div>
+</div>
+
+<script>
+function answer(el, explanation) {
+  var opts = document.querySelectorAll('.quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+</script>
+
+<footer>Generated as a learning artifact on LakeSail / Sail, the Rust-native Spark replacement. Sources: lakesail.com, github.com/lakehq/sail. — zero_rxpc 🦀</footer>
+</div>
+</body>
+</html>

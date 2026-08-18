@@ -33,5 +33,12 @@
     "description": "Fixed window, sliding log, sliding counter, token bucket, and leaky bucket — visual timelines, use cases, pros/cons, and a quiz.",
     "topic": "system design",
     "date": "2026-08-18"
+  },
+  {
+    "slug": "lakesail",
+    "title": "LakeSail (Sail): The Rust-Native Spark Replacement",
+    "description": "How Sail swaps Spark's JVM engine for Rust + Arrow + DataFusion, the benchmark numbers, pros/cons, and when it's actually worth switching.",
+    "topic": "data engineering",
+    "date": "2026-08-18"
   }
 ]
