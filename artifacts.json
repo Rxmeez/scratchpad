@@ -26,5 +26,12 @@
     "description": "Pessimistic locking vs optimistic concurrency vs MVCC — timelines, real SQL examples, pros/cons, and when to use each, plus a quiz.",
     "topic": "databases",
     "date": "2026-08-17"
+  },
+  {
+    "slug": "rate-limiting",
+    "title": "Rate Limiting Algorithms, Explained Visually",
+    "description": "Fixed window, sliding log, sliding counter, token bucket, and leaky bucket — visual timelines, use cases, pros/cons, and a quiz.",
+    "topic": "system design",
+    "date": "2026-08-18"
   }
 ]

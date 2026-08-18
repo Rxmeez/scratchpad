@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>Rate Limiting Algorithms, Explained Visually</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .diagram { text-align:center; background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:24px 16px; font-family: "SF Mono", ui-monospace, Consolas, monospace; overflow-x:auto; }
+  .flow-step { display:inline-block; background: rgba(255,107,74,0.12); color: var(--accent); border:1px solid var(--accent-dim); padding:8px 14px; border-radius:6px; margin:4px; font-size:0.85rem; font-weight:600; }
+  .arrow { color: var(--text-dim); font-size:1.1rem; margin:0 6px; }
+  .pro { color: #4ade80; font-weight: 600; }
+  .con { color: #f87171; font-weight: 600; }
+  .badge-good { color: #4ade80; font-weight:600; }
+  .badge-bad { color: #f87171; font-weight:600; }
+  .bucket-row { display:flex; align-items:flex-end; gap:6px; justify-content:center; font-family: "SF Mono", ui-monospace, Consolas, monospace; font-size:0.78rem; margin:10px 0; }
+  .req-ok { background:#4ade80; color:#04240f; border-radius:4px; padding:4px 8px; font-weight:700; }
+  .req-drop { background:#f87171; color:#3a0a0a; border-radius:4px; padding:4px 8px; font-weight:700; text-decoration:line-through; }
+  .window-box { display:inline-block; border:1px dashed var(--accent-dim); border-radius:6px; padding:8px 12px; margin:4px; font-size:0.8rem; color:var(--text-dim); }
+  .quiz-opt { display:block; width:100%; text-align:left; background: var(--bg-elevated); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:8px 0; cursor:pointer; font-size:0.95rem; font-family: inherit; }
+  .quiz-opt:hover { border-color: var(--accent-dim); }
+  .quiz-opt.correct { background: rgba(74,222,128,0.12); border-color:#4ade80; }
+  .quiz-opt.wrong { background: rgba(248,113,113,0.12); border-color:#f87171; }
+  #quiz-explain { margin-top:14px; padding:14px; border-radius:8px; background: var(--code-bg); border:1px solid var(--border); display:none; line-height:1.6; }
+  table td, table th { padding:8px 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site-header">
+<a class="brand" href="../../"><span class="dot"></span> scratchpad</a>
+<span class="tag">system design</span>
+</header>
+
+<h1>Rate Limiting Algorithms, Explained Visually</h1>
+<p class="meta">2026-08-18 · zero_rxpc</p>
+
+<p>Five common rate limiting algorithms, how each one actually behaves under bursts, where each shines, and where each falls apart — with visual timelines, pros/cons, and a quiz at the end.</p>
+
+<h2>1. Why Rate Limiting Exists</h2>
+<div class="card">
+<p>Rate limiting caps how many requests a client (user, API key, IP) can make in a given time period. It protects backend resources from overload, enforces fair usage across tenants, prevents abuse (scraping, brute force, DDoS), and keeps costs predictable for pay-per-request downstream services.</p>
+<p><b>Key insight:</b> the algorithm you pick controls the shape of allowed traffic — smooth and steady vs bursty, strict vs forgiving — and that shape has real consequences for both your infra and your users' experience.</p>
+</div>
+
+<h2>2. The Five Algorithms at a Glance</h2>
+<div class="diagram">
+<span class="flow-step">Fixed Window</span><span class="arrow">→</span><span class="flow-step">Sliding Window Log</span><span class="arrow">→</span><span class="flow-step">Sliding Window Counter</span><span class="arrow">→</span><span class="flow-step">Token Bucket</span><span class="arrow">→</span><span class="flow-step">Leaky Bucket</span>
+</div>
+
+<h2>3. Fixed Window Counter</h2>
+<div class="card">
+<p>Divide time into fixed chunks (e.g. every 60s), count requests per chunk, reset to 0 at the boundary. Limit = 5 requests/window.</p>
+<div class="diagram">
+<span class="window-box">Window 1 [0-60s]</span><span class="window-box">Window 2 [60-120s]</span>
+<div class="bucket-row">
+<span class="req-ok">req</span><span class="req-ok">req</span><span class="req-ok">req</span><span class="req-ok">req</span><span class="req-ok">req</span><span class="req-drop">req</span>
+&nbsp;|&nbsp;
+<span class="req-ok">req</span><span class="req-ok">req</span>
+</div>
+<p style="color:var(--text-dim); font-size:0.8rem;">Problem: 5 requests land at 0:59, then 5 more at 1:01 — 10 requests in 2 seconds, both windows individually "compliant."</p>
+</div>
+<p>Example: Redis <code>INCR key</code> with <code>EXPIRE 60</code> on first increment; reject once counter exceeds the limit.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Dead simple to implement — one counter, one TTL</td><td class="con">Boundary burst problem — up to 2x limit can slip through at window edges</td></tr>
+<tr><td class="pro">Very cheap (O(1) memory per client)</td><td class="con">Not smooth — allows sudden bursts right after reset</td></tr>
+</table>
+</div>
+
+<h2>4. Sliding Window Log</h2>
+<div class="card">
+<p>Store a timestamp for every request in a sorted set. On each new request, drop timestamps older than the window, then count what's left.</p>
+<div class="diagram">
+<span class="arrow">Log: [12:00:01, 12:00:15, 12:00:40, 12:00:58]</span><br><br>
+<span class="arrow">New request at 12:01:05 → drop timestamps before 12:00:05 → log becomes [12:00:15, 12:00:40, 12:00:58, 12:01:05] → count=4</span>
+</div>
+<p>Example: Redis sorted set (<code>ZADD</code> + <code>ZREMRANGEBYSCORE</code> to prune + <code>ZCARD</code> to count) per client key.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Perfectly accurate — no boundary burst issue at all</td><td class="con">Memory grows with request volume (stores every timestamp)</td></tr>
+<tr><td class="pro">True rolling window, smooth enforcement</td><td class="con">More expensive per-request (sorted set ops) — costly at high QPS</td></tr>
+</table>
+</div>
+
+<h2>5. Sliding Window Counter (Hybrid)</h2>
+<div class="card">
+<p>A cheaper approximation of the sliding log: keep fixed-window counters, but weight the previous window's count by how much it overlaps the current sliding view.</p>
+<div class="diagram">
+<span class="arrow">estimated_count = current_window_count + previous_window_count × overlap_fraction</span><br><br>
+<span class="arrow">e.g. 30% into the current window → weight previous window at 70%: 3 + (5 × 0.7) = 6.5 → round and compare to limit</span>
+</div>
+<p>Example: Cloudflare and many API gateways use this — two Redis counters (current + previous fixed window) instead of a full log.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Near sliding-log accuracy at fixed-window memory cost</td><td class="con">Approximation — assumes uniform request distribution within the window</td></tr>
+<tr><td class="pro">O(1) memory per client, cheap to compute</td><td class="con">Slightly more complex to implement correctly than fixed window</td></tr>
+</table>
+</div>
+
+<h2>6. Token Bucket</h2>
+<div class="card">
+<p>A bucket holds up to N tokens, refilled at a steady rate. Each request consumes one token; if the bucket is empty, the request is rejected (or queued). Crucially, unused tokens accumulate — this is what allows controlled bursts.</p>
+<div class="diagram">
+<span class="arrow">Bucket capacity: 5 tokens, refill rate: 1 token/sec</span><br><br>
+<span class="flow-step">🪙🪙🪙🪙🪙</span><span class="arrow">idle 5s →</span><span class="flow-step">still 🪙🪙🪙🪙🪙 (capped)</span><span class="arrow">burst of 5 reqs →</span><span class="flow-step">🪙🪙🪙🪙🪙 all consumed, allowed</span><span class="arrow">6th req →</span><span class="req-drop">rejected, bucket empty</span>
+</div>
+<p>Example: AWS API Gateway, Stripe's API, and most cloud rate limiters use this by default. Implemented via <code>current_tokens = min(capacity, current_tokens + elapsed_time × refill_rate)</code> on each request.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Allows legitimate short bursts (good UX for spiky-but-normal traffic)</td><td class="con">Bursts can still momentarily overload downstream if capacity is large</td></tr>
+<tr><td class="pro">Smooth average rate over time, industry-standard choice</td><td class="con">Slightly trickier to reason about than fixed window (two parameters: capacity + refill rate)</td></tr>
+<tr><td class="pro">Cheap — O(1) state per client (token count + last refill time)</td><td class="con">-</td></tr>
+</table>
+</div>
+
+<h2>7. Leaky Bucket</h2>
+<div class="card">
+<p>Requests enter a FIFO queue (the "bucket") and are processed ("leak out") at a fixed, constant rate — regardless of how bursty the input is. If the queue is full, new requests are dropped.</p>
+<div class="diagram">
+<span class="arrow">Bursty input: 10 requests arrive instantly</span><br><br>
+<span class="flow-step">Queue holds up to 5</span><span class="arrow">→ processed at 1 req/sec, steady drip out →</span><span class="flow-step">Downstream sees perfectly smooth 1 req/sec</span><br><br>
+<span class="req-drop">Requests 6-10 dropped — queue was full</span>
+</div>
+<p>Example: network traffic shaping, and API gateways that need to protect a downstream system with a strict fixed processing rate (e.g. a legacy system that can't handle bursts at all).</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Perfectly smooths output rate — best protection for fragile downstreams</td><td class="con">No burst tolerance at all — legitimate spiky traffic gets queued/dropped</td></tr>
+<tr><td class="pro">Predictable, constant outbound rate</td><td class="con">Added latency — requests wait in queue even when server has spare capacity</td></tr>
+</table>
+</div>
+
+<h2>8. Quick Comparison</h2>
+<div class="card">
+<table>
+<tr><th>Algorithm</th><th>Burst handling</th><th>Memory cost</th><th>Accuracy</th></tr>
+<tr><td>Fixed Window</td><td>Poor (edge bursts)</td><td>Lowest</td><td>Low</td></tr>
+<tr><td>Sliding Log</td><td>N/A — exact enforcement</td><td>Highest</td><td>Perfect</td></tr>
+<tr><td>Sliding Counter</td><td>Good approximation</td><td>Low</td><td>High</td></tr>
+<tr><td>Token Bucket</td><td>Allows controlled bursts</td><td>Low</td><td>High</td></tr>
+<tr><td>Leaky Bucket</td><td>None — fully smoothed</td><td>Medium (queue)</td><td>High</td></tr>
+</table>
+</div>
+
+<h2>9. Which One Should You Use?</h2>
+<div class="card">
+<p><span class="badge-good">✅ Token bucket when:</span> you're rate-limiting a public API and want to allow short legitimate bursts (most common real-world choice — Stripe, GitHub, AWS all use variants of this).</p>
+<p><span class="badge-good">✅ Sliding window counter when:</span> you want near-perfect accuracy without the memory cost of a full log — good default for high-traffic gateways (Cloudflare's approach).</p>
+<p><span class="badge-good">✅ Leaky bucket when:</span> protecting a fragile downstream that truly cannot handle any burst (legacy systems, hardware-constrained services, strict SLA queues).</p>
+<p><span class="badge-good">✅ Fixed window when:</span> you need something simple fast and can tolerate some boundary imprecision (internal tools, low-stakes limits).</p>
+<p><span class="badge-bad">❌ Avoid:</span> sliding window log at very high QPS per client (memory/CPU cost balloons) — and avoid fixed window for anything security-sensitive (brute-force protection, login attempts) since the boundary burst can be exploited.</p>
+</div>
+
+<h2>10. Cement It — Quick Interactive Quiz</h2>
+<div class="card">
+<p id="quiz-q"><b>Q1.</b> You're rate-limiting login attempts to stop brute-force attacks (limit: 5 attempts per minute per account). An attacker could exploit which algorithm to sneak in close to 10 attempts within 2 seconds, by timing requests around a window boundary?</p>
+<div id="quiz-opts">
+<button class="quiz-opt" data-correct="true" onclick="answer(this,'Correct. Fixed window resets sharply at the boundary (e.g. every :00 second). An attacker can send 5 requests at 11:59:59 and another 5 at 12:00:01 - both windows individually stay under the limit of 5, but 10 requests actually landed within about 2 seconds. This is the classic fixed-window boundary burst exploit.')">1) Fixed window counter</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Sliding window log tracks the exact timestamp of every request and always counts a true rolling window, so no boundary trick works - the count is always accurate no matter when requests land.')">2) Sliding window log</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Token bucket caps total burst size at the bucket capacity itself, and tokens only refill gradually - there is no reset boundary to game since it is a continuous refill model, not fixed time slices.')">3) Token bucket</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Leaky bucket processes requests out of a queue at a strictly constant rate regardless of arrival pattern, so bursts get queued or dropped rather than let through - there is no exploitable boundary.')">4) Leaky bucket</button>
+</div>
+<div id="quiz-explain"></div>
+</div>
+
+<script>
+function answer(el, explanation) {
+  var opts = document.querySelectorAll('.quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+</script>
+
+<footer>Generated as a learning artifact on rate limiting algorithms. — zero_rxpc 🦀</footer>
+</div>
+</body>
+</html>
