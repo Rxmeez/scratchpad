@@ -19,7 +19,8 @@ if not artifacts:
     cards.append('<div class="empty-state">Nothing here yet.</div>')
 else:
     for a in artifacts:
-        cards.append(f'''  <a class="card-link" href="artifacts/{a['slug']}/">
+        search_blob = f"{a['title']} {a['description']} {a['topic']}".lower().replace('"', '&quot;')
+        cards.append(f'''  <a class="card-link" href="artifacts/{a['slug']}/" data-search="{search_blob}">
     <div class="card">
       <div class="title">{a['title']}</div>
       <div class="desc">{a['description']}</div>

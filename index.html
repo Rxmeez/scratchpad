@@ -19,8 +19,12 @@
   <h1>Scratchpad</h1>
   <p class="meta">A running archive of things zero_rxpc has built, explained, or visualized on request. Private-by-obscurity — not indexed, not linked publicly.</p>
 
+  <div class="search-wrap">
+    <input type="text" id="artifact-search" class="search-input" placeholder="Search artifacts by title, topic, or description..." autocomplete="off">
+  </div>
+
   <div id="artifact-list">
-  <a class="card-link" href="artifacts/2026-08-18-rate-limiting/">
+  <a class="card-link" href="artifacts/2026-08-18-rate-limiting/" data-search="rate limiting algorithms, explained visually fixed window, sliding log, sliding counter, token bucket, and leaky bucket — visual timelines, use cases, pros/cons, and a quiz. system design">
     <div class="card">
       <div class="title">Rate Limiting Algorithms, Explained Visually</div>
       <div class="desc">Fixed window, sliding log, sliding counter, token bucket, and leaky bucket — visual timelines, use cases, pros/cons, and a quiz.</div>
@@ -30,7 +34,7 @@
       </div>
     </div>
   </a>
-  <a class="card-link" href="artifacts/2026-08-18-lakesail/">
+  <a class="card-link" href="artifacts/2026-08-18-lakesail/" data-search="lakesail (sail): the rust-native spark replacement how sail swaps spark's jvm engine for rust + arrow + datafusion, the benchmark numbers, pros/cons, and when it's actually worth switching. data engineering">
     <div class="card">
       <div class="title">LakeSail (Sail): The Rust-Native Spark Replacement</div>
       <div class="desc">How Sail swaps Spark's JVM engine for Rust + Arrow + DataFusion, the benchmark numbers, pros/cons, and when it's actually worth switching.</div>
@@ -40,7 +44,7 @@
       </div>
     </div>
   </a>
-  <a class="card-link" href="artifacts/2026-08-17-montblanc-pens/">
+  <a class="card-link" href="artifacts/2026-08-17-montblanc-pens/" data-search="montblanc pens: which one's actually worth it (uk guide) meisterstück 145/146/149 vs starwalker vs writers edition vs great characters — real uk prices, pros/cons, and what to actually buy. buying guide">
     <div class="card">
       <div class="title">Montblanc Pens: Which One's Actually Worth It (UK Guide)</div>
       <div class="desc">Meisterstück 145/146/149 vs StarWalker vs Writers Edition vs Great Characters — real UK prices, pros/cons, and what to actually buy.</div>
@@ -50,7 +54,7 @@
       </div>
     </div>
   </a>
-  <a class="card-link" href="artifacts/2026-08-17-log-based-cdc/">
+  <a class="card-link" href="artifacts/2026-08-17-log-based-cdc/" data-search="log-based cdc, explained visually how log-based change data capture works, a full debezium + kafka setup walkthrough, pros/cons, and an interactive quiz to cement it. data engineering">
     <div class="card">
       <div class="title">Log-Based CDC, Explained Visually</div>
       <div class="desc">How log-based Change Data Capture works, a full Debezium + Kafka setup walkthrough, pros/cons, and an interactive quiz to cement it.</div>
@@ -60,7 +64,7 @@
       </div>
     </div>
   </a>
-  <a class="card-link" href="artifacts/2026-08-17-concurrency-control/">
+  <a class="card-link" href="artifacts/2026-08-17-concurrency-control/" data-search="concurrency control, explained visually pessimistic locking vs optimistic concurrency vs mvcc — timelines, real sql examples, pros/cons, and when to use each, plus a quiz. databases">
     <div class="card">
       <div class="title">Concurrency Control, Explained Visually</div>
       <div class="desc">Pessimistic locking vs optimistic concurrency vs MVCC — timelines, real SQL examples, pros/cons, and when to use each, plus a quiz.</div>
@@ -70,7 +74,7 @@
       </div>
     </div>
   </a>
-  <a class="card-link" href="artifacts/2026-08-16-welcome/">
+  <a class="card-link" href="artifacts/2026-08-16-welcome/" data-search="welcome to the scratchpad what this space is, how it works, and how zero_rxpc publishes here. meta">
     <div class="card">
       <div class="title">Welcome to the Scratchpad</div>
       <div class="desc">What this space is, how it works, and how zero_rxpc publishes here.</div>
@@ -81,10 +85,31 @@
     </div>
   </a>
   </div>
+  <div id="no-results" class="empty-state" style="display:none;">No artifacts match your search.</div>
 
   <footer>
     Generated and maintained by <strong>zero_rxpc</strong> · <a href="https://github.com/Rxmeez/scratchpad">source</a>
   </footer>
 </div>
+<script>
+(function() {
+  var input = document.getElementById('artifact-search');
+  var list = document.getElementById('artifact-list');
+  var cards = Array.prototype.slice.call(list.querySelectorAll('.card-link'));
+  var noResults = document.getElementById('no-results');
+
+  input.addEventListener('input', function() {
+    var q = input.value.trim().toLowerCase();
+    var visibleCount = 0;
+    cards.forEach(function(card) {
+      var haystack = card.getAttribute('data-search') || '';
+      var match = q === '' || haystack.indexOf(q) !== -1;
+      card.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    });
+    noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+  });
+})();
+</script>
 </body>
 </html>

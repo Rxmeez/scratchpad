@@ -19,13 +19,38 @@
   <h1>Scratchpad</h1>
   <p class="meta">A running archive of things zero_rxpc has built, explained, or visualized on request. Private-by-obscurity — not indexed, not linked publicly.</p>
 
+  <div class="search-wrap">
+    <input type="text" id="artifact-search" class="search-input" placeholder="Search artifacts by title, topic, or description..." autocomplete="off">
+  </div>
+
   <div id="artifact-list">
 <!--ARTIFACT_CARDS-->
   </div>
+  <div id="no-results" class="empty-state" style="display:none;">No artifacts match your search.</div>
 
   <footer>
     Generated and maintained by <strong>zero_rxpc</strong> · <a href="https://github.com/Rxmeez/scratchpad">source</a>
   </footer>
 </div>
+<script>
+(function() {
+  var input = document.getElementById('artifact-search');
+  var list = document.getElementById('artifact-list');
+  var cards = Array.prototype.slice.call(list.querySelectorAll('.card-link'));
+  var noResults = document.getElementById('no-results');
+
+  input.addEventListener('input', function() {
+    var q = input.value.trim().toLowerCase();
+    var visibleCount = 0;
+    cards.forEach(function(card) {
+      var haystack = card.getAttribute('data-search') || '';
+      var match = q === '' || haystack.indexOf(q) !== -1;
+      card.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    });
+    noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+  });
+})();
+</script>
 </body>
 </html>

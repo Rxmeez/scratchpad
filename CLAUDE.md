@@ -46,6 +46,36 @@ linking to a handful (3-5) of real, relevant external resources — official
 docs, well-regarded blog posts, RFCs, etc. Use real URLs only, never
 fabricated links.
 
+## Mobile Friendliness
+
+All artifacts must be mobile-friendly out of the box:
+- Rely on `assets/style.css` (already responsive: fluid `.wrap` padding, a
+  `@media (max-width: 600px)` breakpoint that shrinks headings/spacing, and
+  tables/`pre` blocks that scroll horizontally instead of overflowing the
+  viewport). Don't fight it with fixed pixel widths.
+- Any custom `<style>` block inside an artifact (diagrams, grids, custom
+  cards, etc.) must also be responsive: use `overflow-x:auto` on wide
+  diagrams/code blocks, `flex-wrap`/`grid-template-columns:
+  repeat(auto-fit, minmax(...))` for multi-column layouts instead of fixed
+  columns, and avoid fixed `width`/`min-width` values that don't shrink
+  below ~360px viewport width.
+- The `<meta name="viewport" content="width=device-width, initial-scale=1">`
+  tag is mandatory on every page (already in the standard artifact head —
+  don't remove it).
+- Test any new custom layout mentally at a 375px-wide viewport before
+  considering the artifact done — nothing should require horizontal
+  scrolling of the whole page (only individual wide elements like tables
+  may scroll internally).
+
+## Homepage Search
+
+The homepage (`index_template.html`) includes a client-side search input
+(`#artifact-search`) that filters `.card-link` elements by matching against
+each card's `data-search` attribute (title + description + topic,
+lowercased). `build.py` generates this attribute automatically from
+`artifacts.json` — don't hand-edit `index.html`, and make sure any template
+changes preserve the `data-search` attribute and the search script.
+
 ## General Structure
 
 ```
