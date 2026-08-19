@@ -19,14 +19,16 @@ if not artifacts:
     cards.append('<div class="empty-state">Nothing here yet.</div>')
 else:
     for a in artifacts:
-        cards.append(f'''  <div class="card">
-    <a class="title" href="artifacts/{a['slug']}/">{a['title']}</a>
-    <div class="desc">{a['description']}</div>
-    <div class="meta-row">
-      <span class="badge">{a['topic']}</span>
-      <span>{a['date']}</span>
+        cards.append(f'''  <a class="card-link" href="artifacts/{a['slug']}/">
+    <div class="card">
+      <div class="title">{a['title']}</div>
+      <div class="desc">{a['description']}</div>
+      <div class="meta-row">
+        <span class="badge">{a['topic']}</span>
+        <span>{a['date']}</span>
+      </div>
     </div>
-  </div>''')
+  </a>''')
 
 cards_html = "\n".join(cards)
 
