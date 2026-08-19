@@ -100,9 +100,31 @@
 <div id="quiz-explain"></div>
 </div>
 
+<div class="card">
+<p><b>Q2.</b> A team wants to migrate their existing PySpark pipelines to Sail. According to how Sail is designed to be adopted, what is the actual migration step required for standard PySpark/Spark SQL code?</p>
+<div id="quiz-opts-2">
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Sail is explicitly designed as a drop-in replacement via the Spark Connect protocol - a full line-by-line rewrite would defeat that entire value proposition and is not what LakeSail claims or requires for standard workloads.')">1) Rewrite all DataFrame and SQL code in Sail's own proprietary API</button>
+<button class="quiz-opt" data-correct="true" onclick="answer2(this,'Correct. Because Sail speaks the Spark Connect protocol, existing PySpark code (DataFrame calls, SQL strings, UDFs) runs unmodified - the only change is pointing the SparkSession builder at a different remote connection string (e.g. sc://localhost:50051 instead of the JVM cluster). That is the core "drop-in" claim.')">2) Change only the SparkSession connection string to point at the Sail server; the rest of the code stays the same</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Sail natively supports open lakehouse formats like Delta Lake and Iceberg - converting to a new proprietary storage format is not part of the migration path and would undercut the "no lock-in" pitch.')">3) Export all data to a new proprietary Sail-only file format first</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Sail workers are described as stateless and lightweight, starting in seconds - there is no requirement to provision a JVM cluster alongside Sail; the whole point is removing the JVM dependency.')">4) Provision a parallel JVM cluster to run alongside Sail during a transition period</button>
+</div>
+<div id="quiz-explain-2"></div>
+</div>
+
+<div class="card">
+<p><b>Q3.</b> A data team is evaluating Sail for a production pipeline that relies heavily on a specific niche third-party Spark connector for a legacy on-prem system, and needs enterprise SLA-backed support today. Based on the tradeoffs discussed, what's the sensible approach?</p>
+<div id="quiz-opts-3">
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Blind immediate migration ignores the stated weaker fit for teams depending on specific third-party connectors that may not be validated against Sail yet, and ignores the need for enterprise support maturity Spark already has.')">1) Migrate the production pipeline to Sail immediately to capture the performance gains</button>
+<button class="quiz-opt" data-correct="true" onclick="answer3(this,'Correct. Given the stated weaker-fit conditions - reliance on a specific unvalidated third-party connector and a need for mature enterprise SLA support - the sensible move is to run the free compatibility-check script against the codebase and pilot Sail on a non-critical pipeline first, rather than betting production-critical infrastructure on an unvalidated dependency and a younger ecosystem.')">2) Run the compatibility-check script and pilot Sail on a non-critical pipeline first, before touching the production system</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Dismissing Sail based on benchmark numbers alone ignores the nuance - the benchmarks are legitimate for standard SQL/DataFrame workloads, the actual risk here is specifically about the unvalidated niche connector and support maturity, not the performance claims themselves.')">3) Dismiss Sail entirely since the benchmark numbers are vendor-published and can't be trusted</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Rewriting a legacy connector from scratch to fit Sail is a significant undertaking that skips the much cheaper first step of simply checking compatibility and piloting on lower-risk workloads before committing that engineering effort.')">4) Rewrite the legacy connector from scratch to work with Sail before doing anything else</button>
+</div>
+<div id="quiz-explain-3"></div>
+</div>
+
 <script>
 function answer(el, explanation) {
-  var opts = document.querySelectorAll('.quiz-opt');
+  var opts = document.querySelectorAll('#quiz-opts .quiz-opt');
   opts.forEach(function(o){ o.disabled = true; });
   var isCorrect = el.getAttribute('data-correct') === 'true';
   el.classList.add(isCorrect ? 'correct' : 'wrong');
@@ -113,7 +135,42 @@ function answer(el, explanation) {
   box.style.display = 'block';
   box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
 }
+function answer2(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-2 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-2');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+function answer3(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-3 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-3');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
 </script>
+
+<h2>7. Further Reading</h2>
+<div class="card">
+<ul>
+<li><a href="https://lakesail.com/" target="_blank" rel="noopener">LakeSail — Official Site</a></li>
+<li><a href="https://github.com/lakehq/sail" target="_blank" rel="noopener">GitHub — lakehq/sail</a></li>
+<li><a href="https://spark.apache.org/docs/latest/spark-connect-overview.html" target="_blank" rel="noopener">Apache Spark Docs — Spark Connect Overview</a></li>
+<li><a href="https://arrow.apache.org/docs/format/Columnar.html" target="_blank" rel="noopener">Apache Arrow — Columnar Format</a></li>
+<li><a href="https://arrow.apache.org/datafusion/" target="_blank" rel="noopener">Apache DataFusion — Official Docs</a></li>
+</ul>
+</div>
 
 <footer>Generated as a learning artifact on LakeSail / Sail, the Rust-native Spark replacement. Sources: lakesail.com, github.com/lakehq/sail. — zero_rxpc 🦀</footer>
 </div>

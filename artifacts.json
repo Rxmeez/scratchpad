@@ -1,41 +1,41 @@
 [
   {
-    "slug": "welcome",
+    "slug": "2026-08-16-welcome",
     "title": "Welcome to the Scratchpad",
     "description": "What this space is, how it works, and how zero_rxpc publishes here.",
     "topic": "meta",
     "date": "2026-08-16"
   },
   {
-    "slug": "montblanc-pens",
+    "slug": "2026-08-17-montblanc-pens",
     "title": "Montblanc Pens: Which One's Actually Worth It (UK Guide)",
     "description": "Meisterstück 145/146/149 vs StarWalker vs Writers Edition vs Great Characters — real UK prices, pros/cons, and what to actually buy.",
     "topic": "buying guide",
     "date": "2026-08-17"
   },
   {
-    "slug": "log-based-cdc",
+    "slug": "2026-08-17-log-based-cdc",
     "title": "Log-Based CDC, Explained Visually",
     "description": "How log-based Change Data Capture works, a full Debezium + Kafka setup walkthrough, pros/cons, and an interactive quiz to cement it.",
     "topic": "data engineering",
     "date": "2026-08-17"
   },
   {
-    "slug": "concurrency-control",
+    "slug": "2026-08-17-concurrency-control",
     "title": "Concurrency Control, Explained Visually",
     "description": "Pessimistic locking vs optimistic concurrency vs MVCC — timelines, real SQL examples, pros/cons, and when to use each, plus a quiz.",
     "topic": "databases",
     "date": "2026-08-17"
   },
   {
-    "slug": "rate-limiting",
+    "slug": "2026-08-18-rate-limiting",
     "title": "Rate Limiting Algorithms, Explained Visually",
     "description": "Fixed window, sliding log, sliding counter, token bucket, and leaky bucket — visual timelines, use cases, pros/cons, and a quiz.",
     "topic": "system design",
     "date": "2026-08-18"
   },
   {
-    "slug": "lakesail",
+    "slug": "2026-08-18-lakesail",
     "title": "LakeSail (Sail): The Rust-Native Spark Replacement",
     "description": "How Sail swaps Spark's JVM engine for Rust + Arrow + DataFusion, the benchmark numbers, pros/cons, and when it's actually worth switching.",
     "topic": "data engineering",

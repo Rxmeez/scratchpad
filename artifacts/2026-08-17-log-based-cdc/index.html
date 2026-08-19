@@ -113,9 +113,31 @@ max_wal_senders = 4</code></pre>
 <div id="quiz-explain"></div>
 </div>
 
+<div class="card">
+<p><b>Q2.</b> A products table needs a schema change — a new nullable column is added. What generally happens to the CDC pipeline if it's set up well (using something like Debezium + a schema registry)?</p>
+<div id="quiz-opts-2">
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'A well-configured CDC pipeline does not need to be fully rebuilt for a simple additive, nullable-column change - that would defeat much of the point of using schema evolution support in tools like Debezium and a schema registry.')">1) The entire pipeline must be torn down and rebuilt from scratch</button>
+<button class="quiz-opt" data-correct="true" onclick="answer2(this,'Correct. Debezium emits schema change events, and with a schema registry (e.g. Confluent Schema Registry) using a compatible evolution mode (like BACKWARD or FORWARD compatibility), consumers can pick up the new field without breaking, especially since it is additive and nullable - the safest kind of schema change. Downstream consumers just see the new optional field appear in later messages.')">2) The connector detects the change and downstream consumers handle it via the schema registry, since it's an additive, backward-compatible change</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'CDC connectors do not silently skip rows on a schema change - that would cause silent data loss, which is exactly what proper schema registry integration is designed to prevent.')">3) The connector silently skips all future rows from that table</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Log-based CDC works by tailing the WAL/binlog asynchronously - it does not require blocking writes on the source table for schema changes to propagate through the pipeline.')">4) All writes to the source table are blocked until every consumer updates</button>
+</div>
+<div id="quiz-explain-2"></div>
+</div>
+
+<div class="card">
+<p><b>Q3.</b> You're deciding between log-based CDC and simple nightly batch ETL for syncing an orders table to a data warehouse. The business says a few hours of staleness is completely fine, and the team has no existing Kafka infrastructure. What's the better call?</p>
+<div id="quiz-opts-3">
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Log-based CDC is powerful but brings real ops overhead (Kafka/Connect infra, replication slot monitoring, schema evolution handling) that is not justified when a few hours of staleness is explicitly acceptable and no Kafka infra already exists.')">1) Log-based CDC — it's strictly better in every scenario</button>
+<button class="quiz-opt" data-correct="true" onclick="answer3(this,'Correct. When near real-time freshness is not actually required and there is no existing streaming infrastructure to leverage, nightly batch ETL is simpler, cheaper to operate, and avoids taking on Kafka/Connect ops burden for a benefit (sub-second-to-seconds freshness) the business does not need. This is exactly the kind of case in the article\'s "avoid / overkill" list.')">2) Nightly batch ETL — simpler to build and operate given the stated requirements</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'The two approaches solve overlapping problems (keeping a downstream copy in sync) - running both in parallel would just double the operational burden without a clear benefit when batch alone already meets requirements.')">3) Both simultaneously, to be safe</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Skipping data sync entirely does not meet the stated business need of getting orders data into the warehouse at all - some sync mechanism is still required, just not necessarily CDC.')">4) Neither — just query the production database directly for reporting</button>
+</div>
+<div id="quiz-explain-3"></div>
+</div>
+
 <script>
 function answer(el, explanation) {
-  var opts = document.querySelectorAll('.quiz-opt');
+  var opts = document.querySelectorAll('#quiz-opts .quiz-opt');
   opts.forEach(function(o){ o.disabled = true; });
   var isCorrect = el.getAttribute('data-correct') === 'true';
   el.classList.add(isCorrect ? 'correct' : 'wrong');
@@ -126,7 +148,42 @@ function answer(el, explanation) {
   box.style.display = 'block';
   box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
 }
+function answer2(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-2 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-2');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+function answer3(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-3 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-3');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
 </script>
+
+<h2>7. Further Reading</h2>
+<div class="card">
+<ul>
+<li><a href="https://debezium.io/documentation/reference/stable/tutorial.html" target="_blank" rel="noopener">Debezium — Official Tutorial</a></li>
+<li><a href="https://www.postgresql.org/docs/current/logical-replication.html" target="_blank" rel="noopener">PostgreSQL Docs — Logical Replication</a></li>
+<li><a href="https://www.confluent.io/learn/change-data-capture/" target="_blank" rel="noopener">Confluent — What is Change Data Capture?</a></li>
+<li><a href="https://martin.kleppmann.com/2015/06/02/change-capture-at-berlin-buzzwords.html" target="_blank" rel="noopener">Martin Kleppmann — Turning the Database Inside Out (CDC roots)</a></li>
+<li><a href="https://docs.confluent.io/platform/current/schema-registry/index.html" target="_blank" rel="noopener">Confluent — Schema Registry docs (schema evolution)</a></li>
+</ul>
+</div>
 
 <footer>Generated as a companion to a CDC interview quiz answer. — zero_rxpc 🦀</footer>
 </div>

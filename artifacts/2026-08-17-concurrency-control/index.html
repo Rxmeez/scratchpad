@@ -133,9 +133,31 @@
 <div id="quiz-explain"></div>
 </div>
 
+<div class="card">
+<p><b>Q2.</b> A high-traffic ticket-booking system needs to guarantee that two customers can never both successfully book the last remaining seat, even under heavy concurrent load. Which strategy gives that guarantee immediately, without relying on retries?</p>
+<div id="quiz-opts-2">
+<button class="quiz-opt" data-correct="true" onclick="answer2(this,'Correct. Pessimistic locking (e.g. SELECT ... FOR UPDATE on the seat row) blocks any second transaction from reading/writing that row until the first transaction commits or rolls back, so the last seat can never be double-booked - the guarantee is immediate, not probabilistic or retry-dependent.')">1) Pessimistic locking on the seat row</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'OCC does not block the second transaction from reading or attempting to write - it lets both proceed and only detects the conflict at commit time via the version check, meaning the losing transaction must retry rather than being guaranteed correctness on the first attempt.')">2) Optimistic concurrency control with a version column</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'MVCC alone isolates readers from writers via snapshots, but two concurrent transactions can still both read the seat as available under their own snapshot and attempt to book it - MVCC by itself does not prevent this write-write conflict without an additional locking or version-check mechanism.')">3) MVCC snapshot isolation alone</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Running everything in autocommit mode removes transactional boundaries entirely, making the double-booking race condition worse, not better, since there is no transaction scope to lock or version-check within.')">4) Running every booking query in autocommit mode</button>
+</div>
+<div id="quiz-explain-2"></div>
+</div>
+
+<div class="card">
+<p><b>Q3.</b> On Postgres (which uses MVCC by default), a long-running reporting transaction has been open for 3 hours while normal traffic continues to update rows it touched. What's the main operational concern this creates?</p>
+<div id="quiz-opts-3">
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'The long transaction does not block other readers or writers under MVCC - readers see their own snapshot and writers proceed normally. The concern is elsewhere, not blocking.')">1) It blocks all other reads and writes on the touched tables until it finishes</button>
+<button class="quiz-opt" data-correct="true" onclick="answer3(this,'Correct. Postgres cannot vacuum (clean up) old row versions that might still be visible to the long-running transaction\'s snapshot, so dead tuples pile up on any table touched by concurrent writes. This causes table and index bloat, wasted disk space, and can eventually degrade query performance until the long transaction finally commits or is killed.')">2) It prevents vacuum from cleaning up old row versions, causing table bloat</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'MVCC does not roll back or auto-cancel long transactions by default - Postgres will happily let a transaction run for hours or days unless something like statement_timeout is explicitly configured.')">3) Postgres automatically kills any transaction open longer than 1 hour</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Deadlocks require two or more transactions each waiting on a lock the other holds - a single long-running read-only reporting transaction under MVCC does not inherently create that condition just by staying open.')">4) It causes an automatic deadlock with any transaction that started after it</button>
+</div>
+<div id="quiz-explain-3"></div>
+</div>
+
 <script>
 function answer(el, explanation) {
-  var opts = document.querySelectorAll('.quiz-opt');
+  var opts = document.querySelectorAll('#quiz-opts .quiz-opt');
   opts.forEach(function(o){ o.disabled = true; });
   var isCorrect = el.getAttribute('data-correct') === 'true';
   el.classList.add(isCorrect ? 'correct' : 'wrong');
@@ -146,7 +168,42 @@ function answer(el, explanation) {
   box.style.display = 'block';
   box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
 }
+function answer2(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-2 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-2');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+function answer3(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-3 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-3');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
 </script>
+
+<h2>8. Further Reading</h2>
+<div class="card">
+<ul>
+<li><a href="https://www.postgresql.org/docs/current/mvcc.html" target="_blank" rel="noopener">PostgreSQL Docs — Concurrency Control (MVCC)</a></li>
+<li><a href="https://www.postgresql.org/docs/current/explicit-locking.html" target="_blank" rel="noopener">PostgreSQL Docs — Explicit Locking</a></li>
+<li><a href="https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html" target="_blank" rel="noopener">Martin Fowler — Optimistic Offline Lock</a></li>
+<li><a href="https://vladmihalcea.com/optimistic-vs-pessimistic-locking/" target="_blank" rel="noopener">Vlad Mihalcea — Optimistic vs Pessimistic Locking</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Multiversion_concurrency_control" target="_blank" rel="noopener">Wikipedia — Multiversion Concurrency Control</a></li>
+</ul>
+</div>
 
 <footer>Generated as a learning artifact on database concurrency control. — zero_rxpc 🦀</footer>
 </div>

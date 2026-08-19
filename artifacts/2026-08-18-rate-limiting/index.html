@@ -164,9 +164,31 @@
 <div id="quiz-explain"></div>
 </div>
 
+<div class="card">
+<p><b>Q2.</b> A payments API wants to allow occasional legitimate traffic spikes (e.g. a customer retrying a batch of 20 requests after a brief network blip) without rejecting them outright, while still enforcing a steady average rate over time. Which algorithm is purpose-built for this?</p>
+<div id="quiz-opts-2">
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Fixed window either allows a full burst right after a reset or blocks everything once the count is hit within the current window - it does not smoothly accumulate allowance for occasional bursts the way a bucket-based approach does.')">1) Fixed window counter</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Leaky bucket enforces a strictly constant outbound rate with zero burst tolerance by design - it queues or drops anything above the drip rate, which is the opposite of what is being asked for here.')">2) Leaky bucket</button>
+<button class="quiz-opt" data-correct="true" onclick="answer2(this,'Correct. Token bucket lets unused capacity accumulate as tokens up to the bucket size, so a client that has been idle can spend that saved-up allowance on a short burst, while the steady refill rate still caps the long-run average. This is exactly the mechanism that lets Stripe, GitHub, and AWS APIs tolerate occasional bursts gracefully.')">3) Token bucket</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'Sliding window log is about precise historical counting, not about granting extra burst allowance - once the limit within the rolling window is hit, every algorithm variant of it rejects further requests regardless of how idle the client was beforehand.')">4) Sliding window log</button>
+</div>
+<div id="quiz-explain-2"></div>
+</div>
+
+<div class="card">
+<p><b>Q3.</b> You need to rate-limit traffic in front of a legacy on-prem system that hard-crashes if it receives more than a strictly constant 10 requests/second, with zero tolerance for even brief spikes above that rate. Which algorithm is the safest choice?</p>
+<div id="quiz-opts-3">
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Token bucket explicitly allows bursts up to the bucket capacity whenever tokens have accumulated, which is exactly the behavior that would crash a system with zero burst tolerance.')">1) Token bucket</button>
+<button class="quiz-opt" data-correct="true" onclick="answer3(this,'Correct. Leaky bucket queues incoming requests and releases them downstream at a strictly constant drip rate no matter how bursty the input is, which is precisely the guarantee a zero-burst-tolerance legacy system needs. The tradeoff is added queueing latency and dropped requests once the queue fills, but the downstream never sees more than the fixed rate.')">2) Leaky bucket</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Fixed window can allow up to roughly double the limit in a short window around the boundary (end of one window plus start of the next), which is exactly the kind of brief spike that would crash a zero-tolerance downstream.')">3) Fixed window counter</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Sliding window counter is an approximation that assumes fairly uniform request distribution - it reduces but does not fully eliminate the possibility of short bursts slipping through above the nominal limit, so it is not the safest choice for a system with truly zero tolerance.')">4) Sliding window counter</button>
+</div>
+<div id="quiz-explain-3"></div>
+</div>
+
 <script>
 function answer(el, explanation) {
-  var opts = document.querySelectorAll('.quiz-opt');
+  var opts = document.querySelectorAll('#quiz-opts .quiz-opt');
   opts.forEach(function(o){ o.disabled = true; });
   var isCorrect = el.getAttribute('data-correct') === 'true';
   el.classList.add(isCorrect ? 'correct' : 'wrong');
@@ -177,7 +199,42 @@ function answer(el, explanation) {
   box.style.display = 'block';
   box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
 }
+function answer2(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-2 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-2');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+function answer3(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-3 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-3');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
 </script>
+
+<h2>11. Further Reading</h2>
+<div class="card">
+<ul>
+<li><a href="https://cloud.google.com/architecture/rate-limiting-strategies-techniques" target="_blank" rel="noopener">Google Cloud — Rate-limiting strategies and techniques</a></li>
+<li><a href="https://blog.cloudflare.com/counting-things-a-lot-of-different-things/" target="_blank" rel="noopener">Cloudflare Blog — Counting things: sliding window rate limiting</a></li>
+<li><a href="https://stripe.com/blog/rate-limiters" target="_blank" rel="noopener">Stripe Engineering — Scaling your API with rate limiters</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Token_bucket" target="_blank" rel="noopener">Wikipedia — Token bucket algorithm</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Leaky_bucket" target="_blank" rel="noopener">Wikipedia — Leaky bucket algorithm</a></li>
+</ul>
+</div>
 
 <footer>Generated as a learning artifact on rate limiting algorithms. — zero_rxpc 🦀</footer>
 </div>
