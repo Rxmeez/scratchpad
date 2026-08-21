@@ -40,5 +40,12 @@
     "description": "How Sail swaps Spark's JVM engine for Rust + Arrow + DataFusion, the benchmark numbers, pros/cons, and when it's actually worth switching.",
     "topic": "data engineering",
     "date": "2026-08-18"
+  },
+  {
+    "slug": "2026-08-21-auth-methods",
+    "title": "Authentication Methods, Explained Visually",
+    "description": "Session cookies vs JWT vs OAuth/OIDC vs API keys vs MFA vs passkeys — how each works, real pros/cons, when to use which, plus a quiz.",
+    "topic": "security",
+    "date": "2026-08-21"
   }
 ]

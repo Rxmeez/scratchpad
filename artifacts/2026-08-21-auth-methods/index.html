@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>Authentication Methods, Explained Visually</title>
+<link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .diagram { text-align:center; background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:24px 16px; font-family: "SF Mono", ui-monospace, Consolas, monospace; overflow-x:auto; }
+  .flow-step { display:inline-block; background: rgba(255,107,74,0.12); color: var(--accent); border:1px solid var(--accent-dim); padding:8px 14px; border-radius:6px; margin:4px; font-size:0.85rem; font-weight:600; }
+  .arrow { color: var(--text-dim); font-size:1.1rem; margin:0 6px; }
+  .pro { color: #4ade80; font-weight: 600; }
+  .con { color: #f87171; font-weight: 600; }
+  .badge-good { color: #4ade80; font-weight:600; }
+  .badge-bad { color: #f87171; font-weight:600; }
+  .quiz-opt { display:block; width:100%; text-align:left; background: var(--bg-elevated); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:8px 0; cursor:pointer; font-size:0.95rem; font-family: inherit; }
+  .quiz-opt:hover { border-color: var(--accent-dim); }
+  .quiz-opt.correct { background: rgba(74,222,128,0.12); border-color:#4ade80; }
+  .quiz-opt.wrong { background: rgba(248,113,113,0.12); border-color:#f87171; }
+  #quiz-explain, #quiz-explain-2, #quiz-explain-3 { margin-top:14px; padding:14px; border-radius:8px; background: var(--code-bg); border:1px solid var(--border); display:none; line-height:1.6; }
+  .method-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:14px; }
+  .method-card { background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; }
+  .method-card h3 { margin-top:0; color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site-header">
+<a class="brand" href="../../"><span class="dot"></span> scratchpad</a>
+<span class="tag">security / system design</span>
+</header>
+
+<h1>Authentication Methods, Explained Visually</h1>
+<p class="meta">2026-08-21 · zero_rxpc</p>
+
+<p>A tour of how systems actually verify "who are you?" — from the ancient password-in-a-cookie approach to modern passkeys. Covers the mechanics, the tradeoffs, and when each method is the right call.</p>
+
+<h2>1. The Landscape</h2>
+<div class="method-grid">
+<div class="method-card"><h3>Session-based (Cookies)</h3><p>Server creates a session on login, stores it server-side, and hands the browser an opaque session ID cookie. Every request round-trips that cookie back to check against server state.</p></div>
+<div class="method-card"><h3>Token-based (JWT)</h3><p>Server issues a signed, self-contained token after login. No server-side session store needed — the token itself proves identity until it expires.</p></div>
+<div class="method-card"><h3>OAuth 2.0 / OIDC</h3><p>Delegated auth: "Login with Google/GitHub." A third-party identity provider vouches for the user, and your app never sees their password.</p></div>
+<div class="method-card"><h3>API Keys</h3><p>A static secret string sent with every request (header or query param), typically for machine-to-machine or third-party integrations, not human logins.</p></div>
+<div class="method-card"><h3>Multi-Factor Auth (MFA/2FA)</h3><p>Something you know (password) + something you have (OTP app/SMS) or something you are (biometric) — stacked factors to survive a single leaked credential.</p></div>
+<div class="method-card"><h3>Passkeys / WebAuthn</h3><p>Public-key cryptography bound to a device. No shared secret ever crosses the wire — phishing-resistant by design.</p></div>
+</div>
+
+<h2>2. Session-Based Auth (Cookies)</h2>
+<div class="diagram">
+<span class="flow-step">Browser: submit login</span><span class="arrow">→</span><span class="flow-step">Server: verify + create session</span><span class="arrow">→</span><span class="flow-step">Server: store session in DB/Redis</span>
+<br><br>
+<span class="flow-step">Server: Set-Cookie: session_id=xyz</span><span class="arrow">→</span><span class="flow-step">Browser stores cookie</span><span class="arrow">→</span><span class="flow-step">Every request sends cookie back</span>
+</div>
+<div class="card">
+<p>The classic web pattern. The cookie itself is meaningless (a random ID) — all the actual identity data lives server-side, keyed by that ID. This is why sessions can be instantly revoked (just delete the server-side record) and why it's been the default for decades.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Instant revocation — delete the session, user is logged out everywhere</td><td class="con">Requires server-side storage (Redis/DB) — doesn't scale horizontally for free</td></tr>
+<tr><td class="pro">Small footprint on the wire (just an opaque ID)</td><td class="con">Needs sticky sessions or a shared session store across server instances</td></tr>
+<tr><td class="pro">Battle-tested, well-understood security model (HttpOnly, Secure, SameSite flags)</td><td class="con">Cross-domain/cross-app auth (e.g. mobile app + web app) is awkward</td></tr>
+</table>
+</div>
+
+<h2>3. Token-Based Auth (JWT)</h2>
+<div class="diagram">
+<span class="flow-step">Browser: submit login</span><span class="arrow">→</span><span class="flow-step">Server: verify + sign JWT</span><span class="arrow">→</span><span class="flow-step">Return JWT to client</span>
+<br><br>
+<span class="flow-step">Client stores JWT (localStorage/memory)</span><span class="arrow">→</span><span class="flow-step">Send as Authorization: Bearer &lt;token&gt;</span><span class="arrow">→</span><span class="flow-step">Server verifies signature, no DB lookup</span>
+</div>
+<div class="card">
+<p>A JWT is three base64 chunks — <code>header.payload.signature</code> — where the payload holds claims like <code>{"sub": "user123", "exp": 1755999999}</code>. The server checks the signature (using a secret or public key) instead of looking anything up. This makes JWTs stateless and horizontally scalable, but revocation is the classic pain point: once issued, a JWT is valid until it expires — there's no built-in "kill switch."</p>
+<pre><code>// Decoded JWT payload example
+{
+  "sub": "user_42",
+  "role": "admin",
+  "iat": 1755990000,
+  "exp": 1755993600
+}</code></pre>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Stateless — no server-side session store, scales horizontally with ease</td><td class="con">Hard to revoke early (need a blocklist or short expiry + refresh tokens)</td></tr>
+<tr><td class="pro">Works cleanly across services/microservices (self-contained claims)</td><td class="con">Payload is base64, not encrypted — never put secrets in the claims</td></tr>
+<tr><td class="pro">Good fit for mobile apps and APIs without cookies</td><td class="con">Token size grows with claims — bigger than a session cookie</td></tr>
+</table>
+</div>
+
+<h2>4. OAuth 2.0 / OpenID Connect (Delegated Auth)</h2>
+<div class="diagram">
+<span class="flow-step">Your App</span><span class="arrow">→ redirect →</span><span class="flow-step">Google Login</span><span class="arrow">→ user approves →</span><span class="flow-step">Google → Auth Code</span>
+<br><br>
+<span class="flow-step">Your App exchanges code</span><span class="arrow">→</span><span class="flow-step">Google returns Access Token + ID Token</span><span class="arrow">→</span><span class="flow-step">Your App verifies ID Token, logs user in</span>
+</div>
+<div class="card">
+<p><b>Important distinction:</b> OAuth 2.0 is an <i>authorization</i> framework (grants access to resources/APIs), not an authentication protocol by itself. <b>OpenID Connect (OIDC)</b> is a thin identity layer built on top of OAuth 2.0 that adds the <code>ID Token</code> (a JWT describing who the user is) — that's the piece that actually gives you login/authentication.</p>
+<p>This is the "Login with Google/GitHub/Apple" pattern. Your app never touches the user's Google password — it just receives a signed assertion of identity, plus optionally scoped access to their data (calendar, email, etc.) via the access token.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Users don't create/remember a new password for your app</td><td class="con">You depend on a third party's uptime and policies</td></tr>
+<tr><td class="pro">Offloads MFA, breach detection, password hygiene to the IdP</td><td class="con">More moving parts — redirect flows, token exchange, PKCE for public clients</td></tr>
+<tr><td class="pro">Lower friction signup (one click vs form fill)</td><td class="con">Account recovery gets tangled if the user loses access to the IdP account</td></tr>
+</table>
+</div>
+
+<h2>5. API Keys</h2>
+<div class="card">
+<p>A long, random static string issued once, then sent with every request — usually in an <code>Authorization: Bearer &lt;key&gt;</code> or a custom header like <code>X-API-Key</code>. Built for machine-to-machine calls (a backend calling Stripe, a script hitting your own API), not for human login flows — there's no "session," no expiry by default, and no built-in concept of a logged-in user identity beyond "whoever holds this string."</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Dead simple to implement and use</td><td class="con">No expiry by default — a leaked key works forever until manually revoked</td></tr>
+<tr><td class="pro">Great for service-to-service and third-party integrations</td><td class="con">No standard for scoping/rotation — every provider does it differently</td></tr>
+<tr><td class="pro">No login flow/redirect needed</td><td class="con">Poor fit for human users — no MFA, no session semantics</td></tr>
+</table>
+</div>
+
+<h2>6. Multi-Factor Authentication (MFA / 2FA)</h2>
+<div class="diagram">
+<span class="flow-step">Factor 1: Password (something you know)</span><span class="arrow">+</span><span class="flow-step">Factor 2: OTP app / SMS / security key (something you have)</span><span class="arrow">+</span><span class="flow-step">Factor 3: Biometric (something you are)</span>
+</div>
+<div class="card">
+<p>MFA doesn't replace a login method — it stacks on top of one. Even if a password leaks in a breach, the attacker still needs the second factor. TOTP apps (Google Authenticator, Authy) generate a 6-digit code from a shared secret + current time, refreshed every 30 seconds. SMS-based 2FA is the weakest common option (vulnerable to SIM-swapping) but still far better than password-only.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Massively reduces account takeover risk from leaked/reused passwords</td><td class="con">Adds friction to every login — some users disable it if not enforced</td></tr>
+<tr><td class="pro">TOTP/hardware keys work offline, no network dependency</td><td class="con">SMS-based OTP is vulnerable to SIM-swap attacks</td></tr>
+<tr><td class="pro">Cheap to add on top of existing password auth</td><td class="con">Lost device/recovery flow needs careful design (backup codes etc.)</td></tr>
+</table>
+</div>
+
+<h2>7. Passkeys / WebAuthn (Passwordless)</h2>
+<div class="diagram">
+<span class="flow-step">Register: device generates key pair</span><span class="arrow">→</span><span class="flow-step">Public key sent to server</span><span class="arrow">→</span><span class="flow-step">Private key stays on device (secure enclave)</span>
+<br><br>
+<span class="flow-step">Login: server sends challenge</span><span class="arrow">→</span><span class="flow-step">Device signs with private key</span><span class="arrow">→</span><span class="flow-step">Server verifies with stored public key</span>
+</div>
+<div class="card">
+<p>Built on the WebAuthn standard, passkeys use asymmetric cryptography instead of a shared secret. There is no password to phish, leak, or reuse across sites — the private key never leaves the device (it's locked behind Face ID, Touch ID, or a PIN). This is why passkeys are considered phishing-resistant: even a perfect fake login page can't extract a private key that never gets transmitted anywhere.</p>
+<table>
+<tr><th>✅ Pros</th><th>❌ Cons</th></tr>
+<tr><td class="pro">Phishing-resistant by construction — nothing secret ever crosses the wire</td><td class="con">Cross-device/platform support still maturing (sync via iCloud Keychain, Google Password Manager, etc.)</td></tr>
+<tr><td class="pro">No password to remember, leak, or reuse</td><td class="con">Recovery story is newer — losing all your devices is a real edge case to design for</td></tr>
+<tr><td class="pro">Faster login UX than password + OTP</td><td class="con">Not yet universally supported by every login page/legacy system</td></tr>
+</table>
+</div>
+
+<h2>8. Which One Should You Actually Use?</h2>
+<div class="card">
+<p><span class="badge-good">✅ Session cookies:</span> classic server-rendered web apps, single backend, need instant revocation (banking, admin panels).</p>
+<p><span class="badge-good">✅ JWT:</span> microservices, mobile APIs, anything that needs to scale stateless auth checks across many servers without a shared session store.</p>
+<p><span class="badge-good">✅ OAuth/OIDC:</span> consumer apps where lowering signup friction matters, or when you need scoped access to a third-party's data (Google Calendar, GitHub repos) on the user's behalf.</p>
+<p><span class="badge-good">✅ API keys:</span> server-to-server integrations, internal tooling, public APIs for developers.</p>
+<p><span class="badge-good">✅ MFA:</span> layer it on top of literally everything with real account value — it's not a replacement, it's a multiplier.</p>
+<p><span class="badge-good">✅ Passkeys:</span> new products today, or migrating high-value accounts away from password-only — this is where the industry is heading (see: Apple, Google, Microsoft all pushing passkeys hard since 2023).</p>
+</div>
+
+<h2>9. Cement It — Quick Interactive Quiz</h2>
+<div class="card">
+<p id="quiz-q"><b>Q1.</b> A leaked JWT with a 24-hour expiry is discovered being used by an attacker 2 hours after issuance. What's the most accurate statement about revoking it immediately?</p>
+<div id="quiz-opts">
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'JWTs are stateless by design precisely so servers do not need a database lookup on every request - so there is no built-in server-side record to simply delete, unlike a session cookie.')">1) Just delete the token from the server-side session table and it stops working instantly</button>
+<button class="quiz-opt" data-correct="true" onclick="answer(this,'Correct. A vanilla JWT is self-verifying via its signature - the server does not check a database on each request, so there is no simple flip-a-switch revocation. In practice, teams either maintain a blocklist (deny-list) of revoked token IDs checked on each request (partially reintroducing state), or rely on short expiries plus refresh tokens so the blast radius of a leak is small. Neither is as clean as a session cookie deletion.')">2) There is no clean instant revocation — you need a blocklist of revoked token IDs or must wait out the remaining expiry window</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'JWTs do not phone home to the issuing server to check validity beyond signature verification - that would defeat the stateless design goal entirely.')">3) The token automatically self-destructs once flagged, because JWTs check back with the issuing server on every use</button>
+<button class="quiz-opt" data-correct="false" onclick="answer(this,'Rotating the server signing secret would invalidate ALL currently issued JWTs for every user, not just the compromised one - a massive blast radius for what should be a targeted fix.')">4) Rotate the server's signing secret — this only invalidates the one leaked token</button>
+</div>
+<div id="quiz-explain"></div>
+</div>
+
+<div class="card">
+<p><b>Q2.</b> Your product wants users to log in via "Sign in with Google" and also let your backend read the user's Google Calendar with their permission. Which building block specifically supplies the calendar access, as opposed to just proving identity?</p>
+<div id="quiz-opts-2">
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'The ID Token (from OpenID Connect) is what proves identity - a signed JWT describing who the user is. It is not what grants access to call Google\'s Calendar API on the user\'s behalf.')">1) The OIDC ID Token</button>
+<button class="quiz-opt" data-correct="true" onclick="answer2(this,'Correct. In OAuth 2.0, the Access Token is what your backend presents to Google\'s Calendar API to fetch data on the user\'s behalf, scoped to whatever permissions (scopes) the user approved. OIDC layers identity (the ID Token) on top of this same flow, but access to protected resources like Calendar comes from the OAuth Access Token, not the identity layer.')">2) The OAuth 2.0 Access Token</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'A session cookie is a server-side auth mechanism for your own app - it has no relationship to calling Google\'s external Calendar API.')">3) A session cookie set by your own backend</button>
+<button class="quiz-opt" data-correct="false" onclick="answer2(this,'An API key is a static secret typically issued for your own service integrations - it is not part of the OAuth delegated-access flow between your app, the user, and Google.')">4) A static API key generated at signup</button>
+</div>
+<div id="quiz-explain-2"></div>
+</div>
+
+<div class="card">
+<p><b>Q3.</b> Why are passkeys (WebAuthn) considered phishing-resistant in a way that passwords and even OTP codes are not?</p>
+<div id="quiz-opts-3">
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Passkeys actually involve MORE cryptographic computation on the device (signing a challenge) than a plaintext password check - the phishing resistance is not about being simpler, it is about what data ever leaves the device.')">1) Because they use a simpler algorithm that is faster to compute than password hashing</button>
+<button class="quiz-opt" data-correct="true" onclick="answer3(this,'Correct. With a password or OTP, the secret (or a code derived from it) is transmitted to whatever server the user is talking to - a convincing fake login page can simply capture and relay it. With passkeys, the private key never leaves the device; the device only ever sends a signature over a server-issued challenge, tied to the legitimate site\'s origin. A phishing site presenting a fake login page cannot extract a signature usable against the real service, because the browser\'s WebAuthn implementation ties the credential to the actual origin.')">2) The private key never leaves the device, and the signed challenge is tied to the legitimate site's origin, so a fake login page cannot obtain anything reusable against the real service</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Passkeys still require network connectivity to communicate with the server during login (to receive the challenge and return the signature) - they are not an offline-only mechanism, and that is not the source of their phishing resistance anyway.')">3) Because passkeys work entirely offline with no network communication at all</button>
+<button class="quiz-opt" data-correct="false" onclick="answer3(this,'Passkeys do not have an expiry timer the way OTP codes or short-lived tokens do - their security model is based on cryptographic key possession and origin-binding, not a race against the clock.')">4) Because the passkey automatically expires after 30 seconds, same as a TOTP code</button>
+</div>
+<div id="quiz-explain-3"></div>
+</div>
+
+<script>
+function answer(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+function answer2(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-2 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-2');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+function answer3(el, explanation) {
+  var opts = document.querySelectorAll('#quiz-opts-3 .quiz-opt');
+  opts.forEach(function(o){ o.disabled = true; });
+  var isCorrect = el.getAttribute('data-correct') === 'true';
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) {
+    opts.forEach(function(o){ if (o.getAttribute('data-correct') === 'true') o.classList.add('correct'); });
+  }
+  var box = document.getElementById('quiz-explain-3');
+  box.style.display = 'block';
+  box.innerHTML = (isCorrect ? '✅ ' : '❌ ') + explanation;
+}
+</script>
+
+<h2>10. Further Reading</h2>
+<div class="card">
+<ul>
+<li><a href="https://datatracker.ietf.org/doc/html/rfc6749" target="_blank" rel="noopener">RFC 6749 — The OAuth 2.0 Authorization Framework</a></li>
+<li><a href="https://openid.net/specs/openid-connect-core-1_0.html" target="_blank" rel="noopener">OpenID Connect Core 1.0 Specification</a></li>
+<li><a href="https://datatracker.ietf.org/doc/html/rfc7519" target="_blank" rel="noopener">RFC 7519 — JSON Web Token (JWT)</a></li>
+<li><a href="https://www.w3.org/TR/webauthn-3/" target="_blank" rel="noopener">W3C — WebAuthn Level 3 Specification</a></li>
+<li><a href="https://owasp.org/www-project-cheat-sheets/cheatsheets/Session_Management_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP — Session Management Cheat Sheet</a></li>
+<li><a href="https://fidoalliance.org/passkeys/" target="_blank" rel="noopener">FIDO Alliance — Passkeys Overview</a></li>
+</ul>
+</div>
+
+<footer>Generated on request — a tour of auth methods for system design interviews and real-world architecture decisions. — zero_rxpc 🦀</footer>
+</div>
+</body>
+</html>
+
