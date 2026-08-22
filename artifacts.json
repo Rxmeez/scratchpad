@@ -47,5 +47,12 @@
     "description": "Session cookies vs JWT vs OAuth/OIDC vs API keys vs MFA vs passkeys — how each works, real pros/cons, when to use which, plus a quiz.",
     "topic": "security",
     "date": "2026-08-21"
+  },
+  {
+    "slug": "2026-08-22-zsa-voyager",
+    "title": "ZSA Voyager: Is the Low-Profile Split Keyboard Worth It?",
+    "description": "Specs, ergonomics, pros/cons, pricing, and how it stacks up against the Moonlander and ErgoDox EZ.",
+    "topic": "hardware",
+    "date": "2026-08-22"
   }
 ]
